@@ -1,4 +1,14 @@
-"""Tests for q1/cipher.py — plain assert only, no third-party frameworks."""
+"""Tests for q1/cipher.py — plain assert only, no third-party frameworks.
+
+New cipher design: each half operates within its own 13-character space (mod 13),
+guaranteeing bijection and perfect round-trips for ALL shift values.
+
+With shifts (3, 5):
+  product = (3 * 5) % 13 = 15 % 13 = 2   <- a-m forward shift
+  sumval  = (3 + 5) % 13 = 8             <- n-z backward shift
+  s1mod13 = 3 % 13       = 3             <- A-M backward shift
+  sq_mod13= (5**2) % 13  = 25 % 13 = 12  <- N-Z forward shift
+"""
 
 import sys
 import os
@@ -7,123 +17,135 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'q1'))
 from cipher import encrypt_char, decrypt_char, encrypt_text, decrypt_text
 
 
-# ── Individual rule tests (shifts 3, 5) ────────────────────────────────────
+# ── a-m rule: FORWARD by (shift1 * shift2) % 13, stays in a-m ──────────────
 
-# a–m rule: shift FORWARD by shift1 * shift2 = 15
-# 'a' (idx 0) → (0 + 15) % 26 = 15 → 'p'
-assert encrypt_char('a', 3, 5) == 'p', f"Expected 'p', got {encrypt_char('a', 3, 5)!r}"
+# 'a' (idx 0)  -> (0 + 2) % 13 = 2  -> 'c'
+assert encrypt_char('a', 3, 5) == 'c', f"Got {encrypt_char('a', 3, 5)!r}"
 
-# 'e' (idx 4) → (4 + 15) % 26 = 19 → 't'
-assert encrypt_char('e', 3, 5) == 't', f"Expected 't', got {encrypt_char('e', 3, 5)!r}"
+# 'e' (idx 4)  -> (4 + 2) % 13 = 6  -> 'g'
+assert encrypt_char('e', 3, 5) == 'g', f"Got {encrypt_char('e', 3, 5)!r}"
 
-# 'm' (idx 12) → (12 + 15) % 26 = 1 → 'b'  (boundary, wraps around)
-assert encrypt_char('m', 3, 5) == 'b', f"Expected 'b', got {encrypt_char('m', 3, 5)!r}"
-
-# n–z rule: shift BACKWARD by shift1 + shift2 = 8
-# 'n' (idx 13) → (13 - 8) % 26 = 5 → 'f'
-assert encrypt_char('n', 3, 5) == 'f', f"Expected 'f', got {encrypt_char('n', 3, 5)!r}"
-
-# 'z' (idx 25) → (25 - 8) % 26 = 17 → 'r'
-assert encrypt_char('z', 3, 5) == 'r', f"Expected 'r', got {encrypt_char('z', 3, 5)!r}"
-
-# A–M rule: shift BACKWARD by shift1 = 3
-# 'A' (idx 0) → (0 - 3) % 26 = 23 → 'X'
-assert encrypt_char('A', 3, 5) == 'X', f"Expected 'X', got {encrypt_char('A', 3, 5)!r}"
-
-# 'M' (idx 12) → (12 - 3) % 26 = 9 → 'J'
-assert encrypt_char('M', 3, 5) == 'J', f"Expected 'J', got {encrypt_char('M', 3, 5)!r}"
-
-# N–Z rule: shift FORWARD by shift2² = 25
-# 'N' (idx 13) → (13 + 25) % 26 = 12 → 'M'  (wraps)
-assert encrypt_char('N', 3, 5) == 'M', f"Expected 'M', got {encrypt_char('N', 3, 5)!r}"
-
-# 'Z' (idx 25) → (25 + 25) % 26 = 24 → 'Y'
-assert encrypt_char('Z', 3, 5) == 'Y', f"Expected 'Y', got {encrypt_char('Z', 3, 5)!r}"
+# 'm' (idx 12) -> (12 + 2) % 13 = 1 -> 'b'   (wraps within a-m)
+assert encrypt_char('m', 3, 5) == 'b', f"Got {encrypt_char('m', 3, 5)!r}"
 
 
-# ── Non-letter passthrough ──────────────────────────────────────────────────
+# ── n-z rule: BACKWARD by (shift1 + shift2) % 13, stays in n-z ──────────────
+
+# 'n' (idx 0 within n-z) -> (0 - 8) % 13 = 5 -> chr(5 + ord('n')) = 's'
+assert encrypt_char('n', 3, 5) == 's', f"Got {encrypt_char('n', 3, 5)!r}"
+
+# 'z' (idx 12 within n-z) -> (12 - 8) % 13 = 4 -> chr(4 + ord('n')) = 'r'
+assert encrypt_char('z', 3, 5) == 'r', f"Got {encrypt_char('z', 3, 5)!r}"
+
+# Result is ALWAYS in n-z range
+for c in 'nopqrstuvwxyz':
+    e = encrypt_char(c, 3, 5)
+    assert 'n' <= e <= 'z', f"n-z breach: {c!r} -> {e!r}"
+
+
+# ── A-M rule: BACKWARD by shift1 % 13, stays in A-M ────────────────────────
+
+# 'A' (idx 0)  -> (0 - 3) % 13 = 10 -> chr(10 + ord('A')) = 'K'
+assert encrypt_char('A', 3, 5) == 'K', f"Got {encrypt_char('A', 3, 5)!r}"
+
+# 'M' (idx 12) -> (12 - 3) % 13 = 9 -> chr(9 + ord('A')) = 'J'
+assert encrypt_char('M', 3, 5) == 'J', f"Got {encrypt_char('M', 3, 5)!r}"
+
+# Result is ALWAYS in A-M range
+for c in 'ABCDEFGHIJKLM':
+    e = encrypt_char(c, 3, 5)
+    assert 'A' <= e <= 'M', f"A-M breach: {c!r} -> {e!r}"
+
+
+# ── N-Z rule: FORWARD by (shift2 ** 2) % 13, stays in N-Z ───────────────────
+
+# 'N' (idx 0 within N-Z) -> (0 + 12) % 13 = 12 -> chr(12 + ord('N')) = 'Z'
+assert encrypt_char('N', 3, 5) == 'Z', f"Got {encrypt_char('N', 3, 5)!r}"
+
+# 'Z' (idx 12 within N-Z) -> (12 + 12) % 13 = 11 -> chr(11 + ord('N')) = 'Y'
+assert encrypt_char('Z', 3, 5) == 'Y', f"Got {encrypt_char('Z', 3, 5)!r}"
+
+# Result is ALWAYS in N-Z range
+for c in 'NOPQRSTUVWXYZ':
+    e = encrypt_char(c, 3, 5)
+    assert 'N' <= e <= 'Z', f"N-Z breach: {c!r} -> {e!r}"
+
+
+# ── Non-letter passthrough ────────────────────────────────────────────────────
 
 assert encrypt_char('3', 3, 5) == '3'
 assert encrypt_char(' ', 3, 5) == ' '
 assert encrypt_char('!', 3, 5) == '!'
 assert encrypt_char('\n', 3, 5) == '\n'
 assert encrypt_char('\t', 3, 5) == '\t'
-assert encrypt_char('5', 10, 10) == '5'
 
 
-# ── Boundary rule distinctness ──────────────────────────────────────────────
+# ── Half-boundary distinctness ────────────────────────────────────────────────
 
-# 'm' and 'n' are in different halves → must produce different encrypted chars
-assert encrypt_char('m', 3, 5) != encrypt_char('n', 3, 5)
-# 'M' and 'N' are in different halves → must produce different encrypted chars
-assert encrypt_char('M', 3, 5) != encrypt_char('N', 3, 5)
+# 'm' (a-m) and 'n' (n-z) use different rules → always different result ranges
+assert 'a' <= encrypt_char('m', 3, 5) <= 'm'   # stays in a-m
+assert 'n' <= encrypt_char('n', 3, 5) <= 'z'   # stays in n-z
 
-
-# ── Wrap-around validity ────────────────────────────────────────────────────
-
-# With shifts (10, 10): shift1*shift2 = 100, mod 26 = 22
-# 'a' → (0 + 22) % 26 = 22 → 'w' — still a valid lowercase
-result_wrap = encrypt_char('a', 10, 10)
-assert 'a' <= result_wrap <= 'z', f"Wrap result not lowercase: {result_wrap!r}"
+# 'M' (A-M) and 'N' (N-Z) use different rules → always different result ranges
+assert 'A' <= encrypt_char('M', 3, 5) <= 'M'   # stays in A-M
+assert 'N' <= encrypt_char('N', 3, 5) <= 'Z'   # stays in N-Z
 
 
-# ── Round-trip tests (collision-aware) ─────────────────────────────────────
-# The cipher maps different source characters to the same cipher character
-# for some shift values (e.g. shifts (3,5): both 'a' and 'x' → 'p').
-# This is inherent to the cipher's design — decryption is deterministic
-# (prioritises a–m) but not always a perfect inverse for all 26 letters.
-# We test round-trips ONLY for characters that do not collide.
+# ── No cross-half collisions for any shift pair ───────────────────────────────
 
-def has_collision(c: str, s1: int, s2: int) -> bool:
-    """Return True if another character encrypts to the same result as c."""
-    target = encrypt_char(c, s1, s2)
-    if 'a' <= c <= 'z':
-        for i in range(26):
-            other = chr(i + ord('a'))
-            if other != c and encrypt_char(other, s1, s2) == target:
-                return True
-    elif 'A' <= c <= 'Z':
-        for i in range(26):
-            other = chr(i + ord('A'))
-            if other != c and encrypt_char(other, s1, s2) == target:
-                return True
-    return False
+for shifts in [(3, 5), (1, 1), (10, 10), (2, 8), (7, 7)]:
+    s1, s2 = shifts
+    # Build full encryption map for all 26 lowercase letters
+    enc_lower = {c: encrypt_char(c, s1, s2) for c in 'abcdefghijklmnopqrstuvwxyz'}
+    # No two distinct source letters share the same encrypted letter
+    enc_values = list(enc_lower.values())
+    assert len(enc_values) == len(set(enc_values)), \
+        f"Lowercase collision detected for shifts {shifts}: {enc_values}"
 
-for shifts in [(3, 5), (1, 1), (10, 10)]:
+    enc_upper = {c: encrypt_char(c, s1, s2) for c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'}
+    enc_values_u = list(enc_upper.values())
+    assert len(enc_values_u) == len(set(enc_values_u)), \
+        f"Uppercase collision detected for shifts {shifts}: {enc_values_u}"
+
+
+# ── Full round-trip for ALL shifts: every letter ──────────────────────────────
+
+for shifts in [(3, 5), (1, 1), (10, 10), (2, 8), (7, 7)]:
     s1, s2 = shifts
     for c in 'abcdefghijklmnopqrstuvwxyz':
-        if not has_collision(c, s1, s2):
-            roundtrip = decrypt_char(encrypt_char(c, s1, s2), s1, s2)
-            assert roundtrip == c, (
-                f"Lowercase round-trip FAIL shifts={shifts}: "
-                f"{c!r} → {encrypt_char(c,s1,s2)!r} → {roundtrip!r}"
-            )
+        got = decrypt_char(encrypt_char(c, s1, s2), s1, s2)
+        assert got == c, (
+            f"Lowercase round-trip FAIL shifts={shifts}: "
+            f"{c!r} -> {encrypt_char(c, s1, s2)!r} -> {got!r}"
+        )
     for c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
-        if not has_collision(c, s1, s2):
-            roundtrip = decrypt_char(encrypt_char(c, s1, s2), s1, s2)
-            assert roundtrip == c, (
-                f"Uppercase round-trip FAIL shifts={shifts}: "
-                f"{c!r} → {encrypt_char(c,s1,s2)!r} → {roundtrip!r}"
-            )
+        got = decrypt_char(encrypt_char(c, s1, s2), s1, s2)
+        assert got == c, (
+            f"Uppercase round-trip FAIL shifts={shifts}: "
+            f"{c!r} -> {encrypt_char(c, s1, s2)!r} -> {got!r}"
+        )
 
 
-# ── Non-alphabetic passthrough round-trip ───────────────────────────────────
-# Non-alpha chars always round-trip perfectly (they pass through unchanged)
+# ── Full text round-trips ─────────────────────────────────────────────────────
+
+sample = "The quick brown fox jumps over the lazy dog."
+for shifts in [(3, 5), (1, 1), (10, 10)]:
+    s1, s2 = shifts
+    encrypted = encrypt_text(sample, s1, s2)
+    decrypted = decrypt_text(encrypted, s1, s2)
+    assert decrypted == sample, (
+        f"Text round-trip FAIL shifts={shifts}:\n"
+        f"  original:  {sample!r}\n"
+        f"  encrypted: {encrypted!r}\n"
+        f"  decrypted: {decrypted!r}"
+    )
+
+# Non-alpha characters always pass through unchanged
 passthrough = "123 !@# \n\t... 456"
 for shifts in [(3, 5), (1, 1), (10, 10)]:
     s1, s2 = shifts
     assert encrypt_text(passthrough, s1, s2) == passthrough
     assert decrypt_text(passthrough, s1, s2) == passthrough
-
-
-# ── Property: encrypt and decrypt are deterministic ─────────────────────────
-# Calling twice with same shifts gives same result
-for s1, s2 in [(3, 5), (2, 8)]:
-    for c in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ':
-        assert encrypt_char(c, s1, s2) == encrypt_char(c, s1, s2)
-        assert decrypt_char(encrypt_char(c, s1, s2), s1, s2) == \
-               decrypt_char(encrypt_char(c, s1, s2), s1, s2)
-
 
 
 if __name__ == "__main__":

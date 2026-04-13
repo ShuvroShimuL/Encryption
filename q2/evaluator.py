@@ -50,11 +50,11 @@ def evaluate_file(input_path: str) -> list:
 
     Reads lines from input_path (UTF-8). For each line:
       - Strips trailing newline only (rstrip('\\n'))
-      - Tries: parse -> evaluate -> format all fields
-      - On ANY exception: tree='ERROR', tokens='ERROR', result='ERROR'
+      - Block 1: parse + format tree/tokens. Any exception -> all three ERROR.
+      - Block 2: evaluate only. ParseError -> result ERROR, tree/tokens valid.
 
     Writes output.txt to the same directory as input_path.
-    Blocks are separated by exactly one blank line. No trailing newline.
+    Blocks are separated by exactly one blank line. Ends with a trailing newline.
 
     Returns a list of dicts:
       {'input': str, 'tree': str, 'tokens': str, 'result': float | 'ERROR'}
@@ -71,50 +71,57 @@ def evaluate_file(input_path: str) -> list:
     for line in lines:
         expr = line.rstrip("\n")
 
-        # Default to ERROR
         tree_str = "ERROR"
         tokens_str = "ERROR"
-        result_str = "ERROR"
         result_val = "ERROR"
+        tree = None
 
+        # Block 1: tokenize + parse + format tree/tokens
+        # Any failure here means the expression is malformed → all three ERROR
         try:
             tree, tokens = parse(expr)
             tree_str = format_tree(tree)
             tokens_str = format_tokens(tokens)
-            # evaluate separately so that parse errors vs eval errors differ
-            val = evaluate(tree)
-            result_str = format_result(val)
-            result_val = val
-        except Exception:
-            # Any failure: set all not-yet-set fields to ERROR
-            # If parse succeeded but evaluate failed (e.g. 1/0):
-            # tree_str and tokens_str may already be set correctly.
-            result_str = "ERROR"
+        except (ParseError, Exception):
+            tree_str = "ERROR"
+            tokens_str = "ERROR"
             result_val = "ERROR"
-            # If parse itself failed, reset tree and tokens too
-            if tree_str == "ERROR" or tokens_str == "ERROR":
-                tree_str = "ERROR"
-                tokens_str = "ERROR"
+            results.append({
+                "input": expr,
+                "tree": "ERROR",
+                "tokens": "ERROR",
+                "result": "ERROR",
+            })
+            if DEBUG:
+                print(f"[DEBUG] parse error for {expr!r}")
+            continue
 
-        res = {
+        # Block 2: evaluate — only catches ParseError (e.g. division by zero)
+        # tree_str and tokens_str are already correctly set from Block 1
+        try:
+            result_val = evaluate(tree)
+        except ParseError:
+            result_val = "ERROR"
+
+        results.append({
             "input": expr,
             "tree": tree_str,
             "tokens": tokens_str,
             "result": result_val,
-        }
-        results.append(res)
+        })
 
         if DEBUG:
-            print(f"[DEBUG] {expr!r} -> tree={tree_str!r} result={result_str!r}")
+            print(f"[DEBUG] {expr!r} -> tree={tree_str!r} result={result_val!r}")
 
-    # Build output content
+    # Build output file
     blocks = []
     for res in results:
+        r = res["result"]
         block = format_block({
             "input": res["input"],
             "tree": res["tree"],
             "tokens": res["tokens"],
-            "result": res["result"] if res["result"] == "ERROR" else format_result(res["result"]),
+            "result": r if r == "ERROR" else format_result(r),
         })
         blocks.append(block)
 
@@ -124,6 +131,7 @@ def evaluate_file(input_path: str) -> list:
         f.write(output_content)
 
     return results
+
 
 
 if __name__ == "__main__":

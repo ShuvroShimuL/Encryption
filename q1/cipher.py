@@ -1,73 +1,77 @@
-"""Pure cipher functions for Q1 — zero I/O, zero prints."""
+"""Pure cipher functions for Q1 — zero I/O, zero prints.
+
+Cipher design: each half of the alphabet forms a closed group under mod 13.
+  - Lowercase a-m  (indices 0-12): modular arithmetic within a-m only
+  - Lowercase n-z  (indices 0-12): modular arithmetic within n-z only
+  - Uppercase A-M  (indices 0-12): modular arithmetic within A-M only
+  - Uppercase N-Z  (indices 0-12): modular arithmetic within N-Z only
+
+Because each half is closed under the cipher, no letter can ever encrypt
+to a letter in the other half. This guarantees bijection within each half
+and makes decryption a perfect mathematical inverse for ALL shift values.
+"""
+
+HALF = 13   # size of each alphabet half
 
 
 def encrypt_char(c: str, shift1: int, shift2: int) -> str:
-    """Encrypt a single character using the two-shift cipher rules."""
+    """Encrypt a single character using the two-shift cipher rules.
+
+    Lowercase a-m : shift FORWARD by (shift1 * shift2) mod 13, stay in a-m
+    Lowercase n-z : shift BACKWARD by (shift1 + shift2) mod 13, stay in n-z
+    Uppercase A-M : shift BACKWARD by shift1 mod 13, stay in A-M
+    Uppercase N-Z : shift FORWARD by (shift2 ** 2) mod 13, stay in N-Z
+    Other chars   : returned unchanged
+    """
     if 'a' <= c <= 'm':
-        shifted = (ord(c) - ord('a') + (shift1 * shift2)) % 26
+        idx = ord(c) - ord('a')                          # 0-12
+        shifted = (idx + (shift1 * shift2)) % HALF
         return chr(shifted + ord('a'))
+
     elif 'n' <= c <= 'z':
-        shifted = (ord(c) - ord('a') - (shift1 + shift2)) % 26
-        return chr(shifted + ord('a'))
+        idx = ord(c) - ord('n')                          # 0-12
+        shifted = (idx - (shift1 + shift2)) % HALF
+        return chr(shifted + ord('n'))
+
     elif 'A' <= c <= 'M':
-        shifted = (ord(c) - ord('A') - shift1) % 26
+        idx = ord(c) - ord('A')                          # 0-12
+        shifted = (idx - shift1) % HALF
         return chr(shifted + ord('A'))
+
     elif 'N' <= c <= 'Z':
-        shifted = (ord(c) - ord('A') + (shift2 ** 2)) % 26
-        return chr(shifted + ord('A'))
+        idx = ord(c) - ord('N')                          # 0-12
+        shifted = (idx + (shift2 ** 2)) % HALF
+        return chr(shifted + ord('N'))
+
     else:
         return c
 
 
 def decrypt_char(c: str, shift1: int, shift2: int) -> str:
-    """Decrypt a single character — algebraic inverse of encrypt_char.
+    """Decrypt a single character — exact algebraic inverse of encrypt_char.
 
-    For each case, computes both possible inverses and returns the one whose
-    result falls in the correct source range. When both land in-range
-    (a genuine collision from the cipher's design), the n-z / N-Z inverse
-    takes priority because those rules use additive shifts that are injective
-    within their own half.
-
-    Note: This cipher can produce collisions for certain shift values —
-    two source characters may encrypt to the same character. In such cases,
-    decryption is deterministic but may not fully reconstruct the original.
+    Because each half operates mod 13 within its own closed group, the
+    inverse is a straightforward reversal of the shift arithmetic.
     """
-    if 'a' <= c <= 'z':
+    if 'a' <= c <= 'm':
         idx = ord(c) - ord('a')
-        # Inverse of a–m rule:  enc = (src + s1*s2) % 26  =>  src = (enc - s1*s2) % 26
-        candidate_am = (idx - (shift1 * shift2)) % 26
-        # Inverse of n–z rule:  enc = (src - s1-s2) % 26  =>  src = (enc + s1+s2) % 26
-        candidate_nz = (idx + (shift1 + shift2)) % 26
+        original = (idx - (shift1 * shift2)) % HALF
+        return chr(original + ord('a'))
 
-        in_am = (0 <= candidate_am <= 12)
-        in_nz = (13 <= candidate_nz <= 25)
+    elif 'n' <= c <= 'z':
+        idx = ord(c) - ord('n')
+        original = (idx + (shift1 + shift2)) % HALF
+        return chr(original + ord('n'))
 
-        if in_am and not in_nz:
-            return chr(candidate_am + ord('a'))
-        if in_nz and not in_am:
-            return chr(candidate_nz + ord('a'))
-        if in_nz:   # both in range → collision; n–z priority
-            return chr(candidate_nz + ord('a'))
-        # neither in range (very unusual) — return best algebraic guess
-        return chr(candidate_am + ord('a'))
-
-    elif 'A' <= c <= 'Z':
+    elif 'A' <= c <= 'M':
         idx = ord(c) - ord('A')
-        # Inverse of A–M rule:  enc = (src - s1) % 26  =>  src = (enc + s1) % 26
-        candidate_am = (idx + shift1) % 26
-        # Inverse of N–Z rule:  enc = (src + s2^2) % 26  =>  src = (enc - s2^2) % 26
-        candidate_nz = (idx - (shift2 ** 2)) % 26
+        original = (idx + shift1) % HALF
+        return chr(original + ord('A'))
 
-        in_am = (0 <= candidate_am <= 12)
-        in_nz = (13 <= candidate_nz <= 25)
-
-        if in_am and not in_nz:
-            return chr(candidate_am + ord('A'))
-        if in_nz and not in_am:
-            return chr(candidate_nz + ord('A'))
-        if in_nz:   # both in range → collision; N–Z priority
-            return chr(candidate_nz + ord('A'))
-        return chr(candidate_am + ord('A'))
+    elif 'N' <= c <= 'Z':
+        idx = ord(c) - ord('N')
+        original = (idx - (shift2 ** 2)) % HALF
+        return chr(original + ord('N'))
 
     else:
         return c
