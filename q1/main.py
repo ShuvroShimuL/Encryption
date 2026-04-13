@@ -2,7 +2,7 @@
 
 import sys
 import os
-from cipher import encrypt_text, decrypt_text
+from cipher import encrypt_char, encrypt_text, decrypt_text
 
 Q1_DIR = os.path.dirname(os.path.abspath(__file__))
 RAW_PATH = os.path.join(Q1_DIR, "raw_text.txt")
@@ -17,7 +17,29 @@ def get_shift_input(prompt: str) -> int:
         try:
             return int(raw)
         except ValueError:
-            print(f"  ✗ '{raw}' is not a valid integer. Please try again.")
+            print(f"  ERROR: '{raw}' is not a valid integer. Please try again.")
+
+
+def check_shifts_safe(text: str, shift1: int, shift2: int) -> list:
+    """Check if the chosen shifts cause any two characters in text to collide.
+
+    Returns a list of collision descriptions (empty list = no collisions).
+    A collision means two different source characters encrypt to the same
+    cipher character, making decryption ambiguous.
+    """
+    collisions = []
+    enc_map = {}
+    for c in text:
+        if not c.isalpha():
+            continue
+        e = encrypt_char(c, shift1, shift2)
+        if e in enc_map and enc_map[e] != c:
+            desc = f"  '{c}' and '{enc_map[e]}' both encrypt to '{e}'"
+            if desc not in collisions:
+                collisions.append(desc)
+        else:
+            enc_map[e] = c
+    return collisions
 
 
 def encrypt_file(shift1: int, shift2: int) -> None:
@@ -84,9 +106,34 @@ def verify() -> None:
 
 if __name__ == "__main__":
     print("=== Q1: Custom Cipher ===\n")
-    shift1 = get_shift_input("Enter shift1 (integer): ")
-    shift2 = get_shift_input("Enter shift2 (integer): ")
-    print()
+
+    # Read raw text once upfront for collision checking
+    try:
+        with open(RAW_PATH, encoding="utf-8") as f:
+            raw_text = f.read()
+    except FileNotFoundError:
+        print(f"Error: '{RAW_PATH}' not found.")
+        sys.exit(1)
+
+    # Keep prompting until the user picks collision-free shifts
+    while True:
+        shift1 = get_shift_input("Enter shift1 (integer): ")
+        shift2 = get_shift_input("Enter shift2 (integer): ")
+
+        collisions = check_shifts_safe(raw_text, shift1, shift2)
+        if not collisions:
+            print(f"  [OK] Shifts ({shift1}, {shift2}) are safe for this text.\n")
+            break
+        else:
+            print(f"\n  [WARNING] Shifts ({shift1}, {shift2}) cause ambiguous encryption.")
+            print(f"  These characters in the text encrypt to the same cipher letter,")
+            print(f"  making perfect decryption impossible:")
+            for desc in collisions[:5]:
+                print(f"   {desc}")
+            if len(collisions) > 5:
+                print(f"  ... and {len(collisions) - 5} more collision(s).")
+            print(f"\n  Tip: try shift1=2, shift2=8 (proven safe for this text).")
+            print(f"  Please enter new shift values:\n")
 
     print("[1/3] Encrypting...")
     encrypt_file(shift1, shift2)
