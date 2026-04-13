@@ -35,6 +35,10 @@ def encrypt_file(shift1: int, shift2: int) -> None:
         f.write(encrypted)
 
     print(f"  [OK] Encrypted -> {ENC_PATH}")
+    print()
+    print("  --- Encrypted Content ---")
+    print(encrypted)
+    print("  -------------------------")
 
 
 def decrypt_file(shift1: int, shift2: int) -> None:
@@ -52,6 +56,10 @@ def decrypt_file(shift1: int, shift2: int) -> None:
         f.write(decrypted)
 
     print(f"  [OK] Decrypted -> {DEC_PATH}")
+    print()
+    print("  --- Decrypted Content ---")
+    print(decrypted)
+    print("  -------------------------")
 
 
 def verify() -> None:
